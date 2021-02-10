@@ -1,6 +1,8 @@
 module Bolt
 
 using AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
+using Base: @kwdef
+using ComponentArrays
 using FFTW
 using ForwardDiff, DiffResults
 using Interpolations
@@ -19,6 +21,7 @@ using ThreadPools
 using TimerOutputs
 using Unitful
 using UnitfulAstro
+using UnPack
 
 import LinearAlgebra: mul!, ldiv!
 
@@ -32,21 +35,10 @@ export ΛCDMParams, AbstractParams,
     @show⌛
 
 
-abstract type AbstractParams{T} end
-
-@with_kw struct ΛCDMParams{T} <: AbstractParams{T} @deftype T
-    h  = 0.7       # hubble factor
-    Ωr = 5.042e-5  # radiation density
-    Ωb = 0.046     # baryon density
-    Ωm = 0.224     # matter density
-    n  = 1.0       # spectral index
-    Yp = 0.0       # primordial helium fraction, currently unused
-    Nν = 3.046     # effective number of relativisic species (PDG25 value)
-end
-
 include("util.jl")
 include("constants.jl")
 include("fftlog.jl")
+include("params.jl")
 include("background.jl")
 include("ionization.jl")
 include("perturbations.jl")

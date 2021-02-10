@@ -2,13 +2,17 @@
 # OPTIMIZATION OPPORTUNITY
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
-@⌛ function source_grid(par::AbstractParams{T}, bg, ih, k_grid,
-        integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
+@⌛ function source_grid(
+    𝕡 :: AbstractParams{T}, bg, ih, k_grid,
+    integrator :: PerturbationIntegrator; 
+    ℓᵧ = 8
+) where {T}
+
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
     for (i_k, k) in enumerate(k_grid)
-        hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ)
-        perturb = boltsolve(hierarchy; reltol=reltol)
+        hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ)
+        perturb = boltsolve(hierarchy)
         for (i_x, x) in enumerate(x_grid)
             u = perturb(x)  # this can be optimized away, save timesteps at the grid!
             du = similar(u)
@@ -19,6 +23,7 @@
     # return grid
     itp = LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Line())
     return itp
+
 end
 
 # we make the assumption that shifting the coordinates upon which we integrate

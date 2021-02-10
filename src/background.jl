@@ -20,7 +20,7 @@ H(𝕡::AbstractParams, x) = Hₐ(𝕡, x2a(x))
 ℋ(𝕡::AbstractParams, x) = ℋₐ(𝕡, x2a(x))
 
 # conformal time
-η(𝕡::AbstractParams, x) = quadgk(a -> 1.0 / (a * ℋₐ(𝕡, a)), 0.0, x2a(x))[1]
+η(𝕡::AbstractParams, x) = quadgk(a -> 1.0 / (a * ℋₐ(𝕡, a)), 0.0, x2a(x); 𝕡.opts.η.rtol)[1]
 
 
 # now build a Background with these functions

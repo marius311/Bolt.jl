@@ -4,23 +4,25 @@ abstract type PerturbationIntegrator end
 struct BasicNewtonian <: PerturbationIntegrator end
 
 # a container for everything needed to integrate a hierarchy at wavenumber k
-struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractParams{T},
-                 BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real}
-    integrator::PI
-    par::CP
-    bg::BG
-    ih::IH
-    k::Tk
-    ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
+@kwdef struct Hierarchy{
+    T<:Real, PI<:PerturbationIntegrator, CP<:AbstractParams{T},
+    BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk
+}
+    integrator :: PI
+    𝕡          :: CP
+    bg         :: BG
+    ih         :: IH
+    k          :: Tk
+    ℓmax_γ     :: Int = 8   # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
+    ℓmax_ν     :: Int = 10
 end
-Hierarchy(integrator::PerturbationIntegrator, par::AbstractParams, bg::AbstractBackground,
-    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ)
 
-@⌛ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
-    xᵢ = first(hierarchy.bg.x_grid)
+@⌛ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=TRBDF2(); reltol=1e-10) where T
+    @unpack 𝕡, bg = hierarchy
+    xᵢ = first(bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol, saveat=hierarchy.bg.x_grid, dense=false)
+    sol = solve(prob, 𝕡.opts.boltsolve.alg; 𝕡.opts.boltsolve.reltol, saveat=hierarchy.bg.x_grid, dense=false)
     return sol
 end
 
@@ -38,8 +40,8 @@ end
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
 @⌛ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
-    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
-    Ωr, Ωb, Ωm, Nν, H₀² = par.Ωr, par.Ωb, par.Ωm, par.Nν, bg.H₀^2 #add Nν≡N_eff
+    k, ℓᵧ, 𝕡, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.𝕡, hierarchy.bg, hierarchy.ih
+    Ωr, Ωb, Ωm, Nν, H₀² = 𝕡.Ωr, 𝕡.Ωb, 𝕡.Ωm, 𝕡.Nν, bg.H₀^2 #add Nν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ″ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ″(x)
     a = x2a(x)
     R = 4Ωr / (3Ωb * a)
@@ -108,8 +110,8 @@ end
 
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
 @⌛ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
-    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
-    ℓ_ν = 10 #again, for now
+    @unpack 𝕡, k, ℓᵧ, bg, ih = hierarchy
+    ℓ_ν = 10 # again, for now
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+5)
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ″ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ″(xᵢ)
     Θ, Θᵖ, 𝒩, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
@@ -137,7 +139,7 @@ end
 
     # neutrino hierarchy
     # for now we assume xᵢ is before neutrinos decouple
-    f_ν = 1/(1 + 1/(7par.Nν/8 *(4/11)^(4/3)))
+    f_ν = 1/(1 + 1/(7𝕡.Nν/8 *(4/11)^(4/3)))
     𝒩[0] = Θ[0]
     𝒩[1] = Θ[1]
     𝒩[2] = - (k^2 *aᵢ²*Φ) / (12H₀²) * 1 / (1 + 5f_ν/2) #Callin06 (71)
@@ -147,7 +149,7 @@ end
 
     #WIP: massive nu
     #FIXME: nonrelativistic transition for massive species, needs to go in bg
-    #^this will have to wait for m_ν to be added to pars
+    #^this will have to wait for m_ν to be added to 𝕡s
     #below notation is not right yet, starting from MB
     #x_nr = m_ν/5.3e-4 -1 #m_ν in eV (PDG26-pg3)
     # same as photons for 0,1
@@ -166,7 +168,7 @@ end
 # Bardeen potential Ψ and its derivative ψ′ for an integrator, or we saved them
 @⌛ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute some quantities
-    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
+    k, ℓᵧ, 𝕡, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.𝕡, hierarchy.bg, hierarchy.ih
     H₀² = bg.H₀^2
     ℋₓ, ℋₓ′, ℋₓ″ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ″(x)
     τₓ, τₓ′, τₓ″ = ih.τ(x), ih.τ′(x), ih.τ″(x)
@@ -177,8 +179,8 @@ end
     Θ′, Θᵖ′, 𝒩′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
     # recalulate these since we didn't save them
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ωr * Θ[2]
-    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ωr * (Θ′[2] - 2 * Θ[2])
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * 𝕡.Ωr * Θ[2]
+    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * 𝕡.Ωr * (Θ′[2] - 2 * Θ[2])
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 
