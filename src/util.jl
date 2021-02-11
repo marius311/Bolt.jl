@@ -59,3 +59,30 @@ macro show⌛(ex)
         result
     end
 end
+
+
+# needed until fix to https://github.com/jw3126/Setfield.jl/issues/153
+@inline function Setfield.setindex(A::OffsetVector{T,S}, val, i::Int) where {T,S<:StaticArray}
+    @boundscheck checkbounds(A, i)
+    OffsetVector{T,S}(setindex(parent(A), val, OffsetArrays.parentindex(Base.axes1(A), i)), A.offsets)
+end
+
+
+# performance optimization for ComponentArray constructors when the
+# names/indices of components are known at compile-time (ie when the
+# components are Numbers, StaticArrays, or OffsetArrays of StaticArrays).
+# this uses a generated function to move the (costly) construction of
+# the Axis object to compile-time
+@generated function ComponentArrays.ComponentArray{SVector}(nt::NamedTuple{Names,Tup}) where {Names, Tup<:NTuple{<:Any,Union{Number,StaticVector,OffsetVector{<:Any,<:StaticVector}}}}
+    # construct a dummy ComponentArray at compile-time as an easy way
+    # to get the Axis object (eltype doesnt matter so use 0)
+    _zero(::Type{<:Number}) where {T<:Number} = 0
+    _zero(::Type{<:Union{SVector{N},OffsetVector{<:Any,<:SVector{N}}}}) where {N} = fill(0,N)
+    Axis = getaxes(ComponentArray(;(Names .=> map(_zero, Tup.parameters))...))
+    # create constructor expression
+    _splat(name, ::Type{<:Number}) = :(nt.$name)
+    _splat(name, ::Type{<:Union{SVector,OffsetVector{<:Any,<:SVector}}}) = :((nt.$name)...)
+    quote
+        ComponentArray(SVector(tuple($(map(_splat, Names, Tup.parameters)...))), $Axis)
+    end
+end

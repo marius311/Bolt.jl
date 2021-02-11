@@ -16,7 +16,9 @@ using Parameters
 using PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
 using QuadGK
+using Setfield
 using SpecialFunctions: lgamma, sphericalbesselj
+using StaticArrays
 using ThreadPools
 using TimerOutputs
 using Unitful
