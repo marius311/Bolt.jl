@@ -5,13 +5,12 @@
 @⌛ function source_grid(
     𝕡 :: AbstractParams{T}, bg, ih, k_grid,
     integrator :: PerturbationIntegrator; 
-    ℓᵧ = 8
 ) where {T}
 
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
     for (i_k, k) in enumerate(k_grid)
-        hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ)
+        hierarchy = Hierarchy(;integrator, 𝕡, bg, ih, k)
         perturb = boltsolve(hierarchy)
         for (i_x, x) in enumerate(x_grid)
             u = perturb(x)  # this can be optimized away, save timesteps at the grid!
